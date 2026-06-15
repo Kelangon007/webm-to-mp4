@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebM to MP4 Converter</title>
+
+    <!-- Wajib untuk Bypass GitHub Pages Security (SharedArrayBuffer) -->
+    <script src="coi-serviceworker.js"></script>
+
+    <!-- Load ffmpeg.wasm -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+
+    <style>
+        body {
+            font-family: monospace;
+            background-color: #121212;
+            color: #e0e0e0;
+            padding: 2rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .container {
+            border: 1px solid #333;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #1e1e1e;
+        }
+        button {
+            background-color: #005f73;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background-color: #333;
+            cursor: not-allowed;
+            color: #777;
+        }
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+            color: #0a9396;
+        }
+        #downloadLink {
+            display: inline-block;
+            margin-top: 15px;
+            color: #94d2bd;
+            text-decoration: none;
+            border: 1px solid #94d2bd;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        #downloadLink:hover {
+            background-color: #94d2bd;
+            color: #121212;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>WebM to MP4 (16:9)</h2>
+        <p>Konversi dilakukan langsung di browser tanpa upload ke server.</p>
+        <input type="file" id="uploader" accept="video/webm">
+        <br>
+        <button id="convertBtn" disabled>Convert ke MP4</button>
+        <div id="status">Status: Menunggu file...</div>
+        <a id="downloadLink" style="display: none;">⬇️ Download MP4 Sekarang</a>
+    </div>
+
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        // log: true agar proses terlihat di console browser (Inspect Element)
+        const ffmpeg = createFFmpeg({ log: true });
+
+        const uploader = document.getElementById('uploader');
+        const convertBtn = document.getElementById('convertBtn');
+        const statusText = document.getElementById('status');
+        const downloadLink = document.getElementById('downloadLink');
+
+        let videoFile;
+
+        // Trigger saat user memilih file
+        uploader.addEventListener('change', (e) => {
+            videoFile = e.target.files[0];
+            if (videoFile) {
+                convertBtn.disabled = false;
+                statusText.innerText = "Status: File siap. Klik Convert.";
+                downloadLink.style.display = 'none'; // Sembunyikan link download kalau pilih file baru
+            }
+        });
+
+        // Trigger saat tombol Convert diklik
+        convertBtn.addEventListener('click', async () => {
+            if (!videoFile) return;
+
+            convertBtn.disabled = true;
+            statusText.innerText = "Status: Memuat mesin FFmpeg... (Tunggu sebentar)";
+
+            // Load FFmpeg ke browser jika belum ter-load
+            if (!ffmpeg.isLoaded()) {
+                await ffmpeg.load();
+            }
+
+            statusText.innerText = "Status: Memproses konversi WebM ke MP4... (Jangan tutup tab ini)";
+
+            // Memasukkan file ke memory internal browser
+            ffmpeg.FS('writeFile', 'input.webm', await fetchFile(videoFile));
+
+            // Eksekusi Command FFmpeg
+            // -aspect 16:9 : Mengunci rasio 16:9
+            // -c:v libx264 : Video codec MP4 standar
+            // -crf 17      : Menjaga kualitas visual tetap tinggi
+            // -preset slow : Kompresi lebih baik
+            await ffmpeg.run(
+                '-i', 'input.webm',
+                '-aspect', '16:9',
+                '-c:v', 'libx264',
+                '-crf', '17',
+                '-preset', 'slow',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                'output.mp4'
+            );
+
+            statusText.innerText = "Status: Selesai! Menyiapkan file...";
+
+            // Mengambil hasil render dari memory browser
+            const data = ffmpeg.FS('readFile', 'output.mp4');
+            
+            // Membuat link untuk mendownload file hasil
+            const videoUrl = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+
+            // Menampilkan tombol download di layar
+            downloadLink.href = videoUrl;
+            downloadLink.download = 'hasil_convert_16_9.mp4';
+            downloadLink.style.display = 'inline-block';
+            
+            statusText.innerText = "Status: Konversi Sukses!";
+            convertBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>
